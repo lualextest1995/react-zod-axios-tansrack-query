@@ -1,14 +1,13 @@
 import axios, {
+  AxiosError,
+  type AxiosInstance,
   type AxiosRequestConfig,
   type AxiosResponse,
-  type AxiosInstance,
   type InternalAxiosRequestConfig,
-  type AxiosError,
 } from "axios";
-
-import { getLocalStorage, getSessionStorage } from "./storage";
-import { getCookie, setCookie } from "./cookie";
-import { getExpiredTime } from "./jwt";
+import { getCookie, removeCookie, setCookie } from "@/utils/cookie";
+import { getExpiredTime } from "@/utils/jwt";
+import { getLocalStorage, getSessionStorage } from "@/utils/storage";
 
 interface QueueTask {
   config: AxiosRequestConfig;
@@ -43,20 +42,21 @@ type PipelineFunction<T> = (input: T) => Promise<T> | T;
 class QueueManager {
   private queue: QueueTask[];
 
-  constructor() {
+  public constructor() {
     this.queue = [];
   }
 
-  enqueue(config: AxiosRequestConfig): Promise<AxiosResponse> {
+  public enqueue(config: AxiosRequestConfig): Promise<AxiosResponse> {
     return new Promise<AxiosResponse>((resolve, reject) => {
+      console.log("加入佇列", config.url);
       this.queue.push({ config, resolve, reject });
     });
   }
 
-  async resolveAll(instance: AxiosInstance): Promise<void> {
+  public async resolveAll(instance: AxiosInstance): Promise<void> {
     for (const task of this.queue) {
       if (isLogout) {
-        task.reject(new UnauthorizedError("未授權，請重新登入", task.config));
+        task.reject(new UnauthorizedError(task.config, "未授權，請重新登入"));
         continue;
       }
       try {
@@ -67,7 +67,7 @@ class QueueManager {
         const error = err as HttpError;
         if (error.status === 401 || error.response?.status === 401) {
           task.reject(
-            new UnauthorizedError("登入已失效，請重新登入", task.config)
+            new UnauthorizedError(task.config, "登入已失效，請重新登入")
           );
           isLogout = true;
         } else {
@@ -79,12 +79,12 @@ class QueueManager {
     isLogout = false;
   }
 
-  rejectAll(err: Error): void {
+  public rejectAll(err: AxiosError): void {
     this.queue.forEach((task) => task.reject(err));
     this.clear();
   }
 
-  clear(): void {
+  public clear(): void {
     this.queue = [];
   }
 }
@@ -104,13 +104,15 @@ class BaseHttpError extends Error implements HttpError {
     headers?: Record<string, string>;
   };
 
-  constructor(
+  public constructor(
     message: string,
-    name: string,
-    config: AxiosRequestConfig,
+    errorName: string,
+    requestConfig: AxiosRequestConfig,
     flags: ErrorFlags = {}
   ) {
     super(message);
+    const name = errorName;
+    const config = requestConfig;
     this.name = name;
     this.config = config;
     this.handled = true;
@@ -119,27 +121,27 @@ class BaseHttpError extends Error implements HttpError {
 }
 
 class OfflineError extends BaseHttpError {
-  constructor(
-    message: string = "設備目前離線，請檢查網路連線",
-    config: AxiosRequestConfig
+  public constructor(
+    config: AxiosRequestConfig,
+    message: string = "設備目前離線，請檢查網路連線"
   ) {
     super(message, "OfflineError", config, { isOfflineError: true });
   }
 }
 
 class UnauthorizedError extends BaseHttpError {
-  constructor(
-    message: string = "未授權，請重新登入",
-    config: AxiosRequestConfig
+  public constructor(
+    config: AxiosRequestConfig,
+    message: string = "未授權，請重新登入"
   ) {
     super(message, "UnauthorizedError", config, { isUnauthorizedError: true });
   }
 }
 
 class IsRefreshingTokenError extends BaseHttpError {
-  constructor(
-    message: string = "正在刷新 token，請稍後再試",
-    config: AxiosRequestConfig
+  public constructor(
+    config: AxiosRequestConfig,
+    message: string = "正在刷新 token，請稍後再試"
   ) {
     super(message, "IsRefreshingTokenError", config, {
       isRefreshingTokenError: true,
@@ -151,11 +153,12 @@ class IsRefreshingTokenError extends BaseHttpError {
 const magicWord = {
   ACCESS_TOKEN: "accessToken",
   REFRESH_TOKEN: "refreshToken",
-  X_ACCESS_TOKEN: "x-access-token",
+  AUTHORIZATION: "authorization",
   X_REFRESH_TOKEN: "x-refresh-token",
   X_LOCALE: "x-locale",
   LANGUAGE: "language",
   CURRENCY: "currency",
+  TOKEN: "token",
 } as const;
 
 const baseURL = "/api";
@@ -164,8 +167,8 @@ let isRefreshing = false;
 let isLogout = false;
 let refreshAttempts = 0;
 let lastResetTime = Date.now();
-const MAX_REFRESH_ATTEMPTS = 10; // 1分鐘內最多10次
-const RESET_INTERVAL = 60 * 1000; // 1分鐘
+const MAX_REFRESH_ATTEMPTS = 10;
+const RESET_INTERVAL = 60 * 1000;
 
 /** ---------- axios instance ---------- */
 const axiosInstance = axios.create({
@@ -180,6 +183,8 @@ axiosInstance.interceptors.request.use(
     applyPipeline<InternalAxiosRequestConfig>(config, [
       checkNetwork,
       checkIsRefreshing,
+      requestValidate,
+      processUrlTemplate,
       preprocessRequest,
       setCurrency,
       setLanguage,
@@ -191,22 +196,65 @@ axiosInstance.interceptors.request.use(
 /** ---------- Response Interceptor ---------- */
 axiosInstance.interceptors.response.use(
   async (response: AxiosResponse) => {
-    return applyPipeline<AxiosResponse>(response, [
+    return await applyPipeline<AxiosResponse>(response, [
       preprocessResponse,
+      responseValidate,
       updateAuth,
       parseBinaryResponse,
     ]).then((res) => res.data);
   },
   async (error: AxiosError) => {
-    const { config, status, response } = error;
+    const newError = preprocessError(error);
+    const isLogin = getCookie("token") === "token";
+    const status401 = newError.response?.status === 401;
+    const status400 = newError.response?.status === 400;
+    const canRefreshToken =
+      status401 || error.isUnauthorizedError || (!isLogin && status400);
+    // const isBlob =
+    //   typeof Blob !== "undefined" && newError.response?.data instanceof Blob;
+
+    // // 二進位錯誤直接拋出(todo)
+    // if (isBlob) {
+    //   const parsedError = await parseBlobError(newError);
+    //   return Promise.reject(parsedError);
+    // }
 
     // 已重試過 → 清除憑證
-    if (config && config._internalRetry) {
-      resetAuth("重試失敗", error);
-      return Promise.reject(error);
+    if (newError.config?._internalRetry) {
+      resetAuth(newError);
+      return Promise.reject(newError);
     }
 
-    return Promise.reject(error);
+    // 正在刷新 token，加入佇列等待
+    if (newError.isRefreshingTokenError && newError.config) {
+      return failedQueue.enqueue(newError.config);
+    }
+
+    // 嘗試刷新 token
+    if (canRefreshToken && newError.config) {
+      checkAndResetCounter(); // 檢查是否需要重置
+      refreshAttempts++;
+      // 超過限制直接登出
+      if (refreshAttempts > MAX_REFRESH_ATTEMPTS) {
+        refreshAttempts = 0;
+        lastResetTime = Date.now();
+        resetAuth(newError);
+        return Promise.reject({
+          ...newError,
+          message: "refresh token 頻率過高",
+        });
+      }
+
+      const queuePromise = failedQueue.enqueue(newError.config);
+      if (!isRefreshing) {
+        isRefreshing = true;
+        await refreshTokenHandler();
+      }
+      return queuePromise;
+    }
+
+    // 其他錯誤直接拋出
+    return Promise.reject(newError);
   }
 );
 
@@ -224,13 +272,15 @@ async function applyPipeline<T>(
   return result;
 }
 
-/** ---------- 請求工具函數 ---------- */
+/** ---------- 請求成功工具函數 ---------- */
 // 檢查網路狀態
 function checkNetwork(
   config: InternalAxiosRequestConfig
 ): InternalAxiosRequestConfig {
-  if (!navigator.onLine)
-    throw new OfflineError("設備目前離線，請檢查網路連線", config);
+  console.log("檢查網路狀態");
+  if (!navigator.onLine) {
+    throw new OfflineError(config, "設備目前離線，請檢查網路連線");
+  }
   return config;
 }
 
@@ -238,31 +288,9 @@ function checkNetwork(
 function checkIsRefreshing(
   config: InternalAxiosRequestConfig
 ): InternalAxiosRequestConfig {
-  if (isRefreshing)
-    throw new IsRefreshingTokenError("正在刷新 token，請稍後再試", config);
-  return config;
-}
-
-// 預處理請求，將 data 與 params 分流
-function preprocessRequest(
-  config: InternalAxiosRequestConfig
-): InternalAxiosRequestConfig {
-  if (config.isPreprocessing) return config;
-  const method = config.method?.toLowerCase() || "get";
-  const isWrite = ["post", "put", "patch", "delete"].includes(method);
-
-  config = requestValidate(config);
-
-  config = processUrlTemplate(config);
-
-  if (isWrite) {
-    config.params = undefined;
-  } else {
-    config.params = config.data;
-    config.data = undefined;
+  if (isRefreshing) {
+    throw new IsRefreshingTokenError(config, "正在刷新 token，請稍後再試");
   }
-
-  config.isPreprocessing = true;
   return config;
 }
 
@@ -270,114 +298,179 @@ function preprocessRequest(
 function requestValidate(
   config: InternalAxiosRequestConfig
 ): InternalAxiosRequestConfig {
-  const { codec, data, url } = config;
-  if (!codec?.request) return config;
+  if (config.isPreprocessing) {
+    return config;
+  }
+  const newConfig = { ...config };
+  const { codec, data, url } = newConfig;
+
+  if (!codec?.request) {
+    return newConfig;
+  }
+
   try {
     const { frontendSchema, backendSchema } = codec.request;
     const dataKeyMap = codec.dataKeyMap ?? {};
-    // 1. 驗證 frontendSchema
+
+    // 1. 驗證前端 schema
     const parsedF = frontendSchema.parse(data);
-    // 2. keyMap camel → snake
-    const mapped =
-      Object.keys(dataKeyMap).length > 0
-        ? mapKeys(parsedF, dataKeyMap, "f2b")
-        : parsedF;
-    // 3. 驗證 backendSchema
+    // 2. 鍵名轉換（camel → snake）
+    const hasKeyMap = Object.keys(dataKeyMap).length > 0;
+    const mapped = hasKeyMap ? mapKeys(parsedF, dataKeyMap, "f2b") : parsedF;
+    // 3. 驗證後端 schema
     const parsedB = backendSchema.parse(mapped);
-    config.data = parsedB;
+
+    newConfig.data = parsedB;
   } catch (err) {
     console.warn(`路徑 ${url} 請求資料格式錯誤`, err);
   }
-  return config;
+
+  return newConfig;
 }
 
 // 處理 URL 模板參數，例如 /api/users/{userId}
 function processUrlTemplate(
   config: InternalAxiosRequestConfig
 ): InternalAxiosRequestConfig {
-  if (!config.url || typeof config.data !== "object" || config.data === null)
+  if (config.isPreprocessing) {
     return config;
-  const urlParams: Record<string, string> = {};
-  config.url = config.url.replace(
-    /\{(\w+)\}/g,
-    (match: string, key: string) => {
-      if (key in config.data) {
-        urlParams[key] = config.data[key];
-        return config.data[key];
-      }
-      return match;
-    }
-  );
-  if (config.removeUrlParams !== false) {
-    config.data = Object.fromEntries(
-      Object.entries(config.data).filter(([k]) => !(k in urlParams))
-    );
   }
-  return config;
+  const newConfig = { ...config };
+  const { url, data } = newConfig;
+  // 早期返回，避免不必要的處理
+  if (!url || typeof data !== "object" || data === null) {
+    return newConfig;
+  }
+
+  const urlParams = new Set<string>();
+
+  // 替換 URL 模板並記錄使用的參數
+  const newUrl = url.replace(/\{(\w+)\}/g, (match, key) => {
+    if (key in data) {
+      urlParams.add(key);
+      return String(data[key]);
+    }
+    return match;
+  });
+
+  // 決定是否要移除 URL 參數
+  const shouldRemoveParams = newConfig.removeUrlParams !== false;
+  const newData =
+    shouldRemoveParams && urlParams.size > 0
+      ? Object.fromEntries(
+          Object.entries(data).filter(([key]) => !urlParams.has(key))
+        )
+      : data;
+
+  return {
+    ...newConfig,
+    url: newUrl,
+    data: newData,
+  };
+}
+
+// 預處理請求，將 data 與 params 分流
+function preprocessRequest(
+  config: InternalAxiosRequestConfig
+): InternalAxiosRequestConfig {
+  if (config.isPreprocessing) {
+    return config;
+  }
+
+  const method = config.method?.toLowerCase() || "get";
+  const isWrite = ["post", "put", "patch", "delete"].includes(method);
+
+  const newConfig = {
+    ...config,
+    params: isWrite ? undefined : config.data,
+    data: isWrite ? config.data : undefined,
+    isPreprocessing: true,
+  };
+
+  return newConfig;
 }
 
 // 設定貨幣標頭
 function setCurrency(
   config: InternalAxiosRequestConfig
 ): InternalAxiosRequestConfig {
+  const newConfig = { ...config };
   const currency = getSessionStorage(magicWord.CURRENCY);
-  if (currency) config.headers[magicWord.CURRENCY] = currency;
-  return config;
+  if (currency) {
+    newConfig.headers[magicWord.CURRENCY] = currency;
+  }
+  return newConfig;
 }
 
 // 設定語言標頭
 function setLanguage(
   config: InternalAxiosRequestConfig
 ): InternalAxiosRequestConfig {
+  const newConfig = { ...config };
   const lang = getLocalStorage(magicWord.LANGUAGE);
-  if (lang) config.headers[magicWord.X_LOCALE] = lang;
-  return config;
+  if (lang) {
+    newConfig.headers[magicWord.X_LOCALE] = lang;
+  }
+  return newConfig;
 }
 
 // 設定 Access Token 標頭
 function setAccessToken(
   config: InternalAxiosRequestConfig
 ): InternalAxiosRequestConfig {
+  const newConfig = { ...config };
   const accessToken = getCookie(magicWord.ACCESS_TOKEN);
-  if (accessToken) config.headers[magicWord.X_ACCESS_TOKEN] = accessToken;
-  return config;
+
+  if (accessToken) {
+    newConfig.headers[magicWord.AUTHORIZATION] = `Bearer ${accessToken}`;
+  }
+
+  return newConfig;
 }
 
-/** ---------- 回應工具函數 ---------- */
-// 預處理回應，包含資料驗證與 key 映射
+/** ---------- 回應成功工具函數 ---------- */
+// 預處理回應，在 data 裡面新增 success 欄位
 function preprocessResponse(response: AxiosResponse): AxiosResponse {
-  response = responseValidate(response);
-  // 將 response.data 加入 success 欄位為 true
-  response.data = {
-    success: true,
-    ...response.data,
-  };
+  const newResponse = { ...response };
+  const { data } = response;
 
-  return response;
+  const isObject =
+    typeof data === "object" && data !== null && !Array.isArray(data);
+
+  if (isObject) {
+    newResponse.data = { success: true, ...data };
+  }
+
+  return newResponse;
 }
 
 // 回應資料驗證
 function responseValidate(response: AxiosResponse): AxiosResponse {
+  const newResponse = { ...response };
   const { config, data } = response;
   const { codec, url } = config;
-  if (!codec?.response) return response;
+
+  if (!codec?.response) {
+    return newResponse;
+  }
+
   try {
     const { frontendSchema, backendSchema } = codec.response;
     const dataKeyMap = codec.dataKeyMap ?? {};
-    // 1. 驗證 backendSchema
+
+    // 1. 驗證後端 schema
     const parsedB = backendSchema.parse(data);
-    // 2. keyMap snake → camel
-    const mapped =
-      Object.keys(dataKeyMap).length > 0
-        ? mapKeys(parsedB, dataKeyMap, "b2f")
-        : parsedB;
-    // 3. 驗證 frontendSchema
+    // 2. 鍵名轉換（snake → camel）
+    const hasKeyMap = Object.keys(dataKeyMap).length > 0;
+    const mapped = hasKeyMap ? mapKeys(parsedB, dataKeyMap, "b2f") : parsedB;
+    // 3. 驗證前端 schema
     const parsedF = frontendSchema.parse(mapped);
-    response.data = parsedF;
+
+    newResponse.data = parsedF;
   } catch (err) {
     console.warn(`路徑 ${url} 回應資料格式錯誤`, err);
   }
-  return response;
+  return newResponse;
 }
 
 // 更新認證資訊
@@ -406,6 +499,68 @@ function parseBinaryResponse(response: AxiosResponse): AxiosResponse {
   return response;
 }
 
+/** ---------- 回應失敗工具函數 ---------- */
+// 預處理錯誤，加入 success 欄位
+function preprocessError(error: AxiosError): AxiosError {
+  if (error.isHandled) {
+    return error;
+  }
+  if (!error.config) {
+    return error;
+  }
+
+  // 從回應標頭取得 traceId
+  const traceId = error.response?.headers?.["x-trace-id"] || "N/A";
+  const message = error.response?.data?.message || error.message || "未知錯誤";
+  // 組合新的錯誤訊息
+  const newMessage = `${message} (${traceId})`;
+
+  return { ...error, success: false, traceId, message: newMessage };
+}
+
+// 解析 Blob 格式錯誤訊息
+// async function parseBlobError(error: AxiosError): Promise<AxiosError> {
+//   try {
+//     const data = error.response?.data;
+//     if (!data || !(data instanceof Blob)) {
+//       return error;
+//     }
+//     const text = await data?.text();
+//     let responseJson;
+
+//     try {
+//       responseJson = JSON.parse(text);
+//     } catch {
+//       responseJson = { message: text };
+//     }
+
+//     // 確保 traceId 存在
+//     if (!responseJson.traceId) {
+//       responseJson.traceId = "N/A";
+//     }
+
+//     // 塞回 response.data
+//     error.response.data = responseJson;
+
+//     // 若沒有 HTTP status，但有 code，則補上
+//     if (responseJson.code && !error.response.status) {
+//       error.response.status = responseJson.code;
+//     }
+
+//     // 🔹 保證 error.message 帶 traceId
+//     error.message =
+//       (responseJson.message || error.message || "未知錯誤") +
+//       ` (${responseJson.traceId})`;
+//     error.traceId = responseJson.traceId;
+//   } catch (_error: unknown) {
+//     error.response.data = { message: "未知的 Blob 錯誤", traceId: "N/A" };
+//     error.message = "未知的 Blob 錯誤 (N/A)";
+//     error.traceId = "N/A";
+//   }
+
+//   return error;
+// }
+
 /** --------- 遞迴 key 映射工具 --------- */
 type KeyMap = Record<string, string>; // backend_key -> frontendKey
 
@@ -415,37 +570,107 @@ const isPlainObject = (v: unknown): v is Record<string, unknown> =>
   !Array.isArray(v) &&
   Object.prototype.toString.call(v) === "[object Object]";
 
+const reverseKeyMap = (map: KeyMap): KeyMap => {
+  const rev: KeyMap = {};
+  for (const [bk, fk] of Object.entries(map)) {
+    rev[fk] = bk;
+  }
+  return rev;
+};
+
 export function mapKeys(
   input: unknown,
   keyMap: KeyMap,
   direction: "b2f" | "f2b"
 ): unknown {
-  if (Array.isArray(input)) {
-    return input.map((x) => mapKeys(x, keyMap, direction));
-  }
-  if (!isPlainObject(input)) {
-    return input;
-  }
-  const result: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(input)) {
-    const mapped =
-      direction === "b2f"
-        ? keyMap[k] ?? k // 後端 → 前端
-        : Object.keys(keyMap).find((bk) => keyMap[bk] === k) ?? k; // 前端 → 後端 (反查)
+  const table = direction === "b2f" ? keyMap : reverseKeyMap(keyMap);
 
-    result[mapped] = mapKeys(v, keyMap, direction);
-  }
-  return result;
+  const walk = (val: unknown): unknown => {
+    if (Array.isArray(val)) {
+      return val.map(walk);
+    }
+    if (!isPlainObject(val)) {
+      return val;
+    }
+
+    return Object.fromEntries(
+      Object.entries(val).map(([k, v]) => {
+        const mappedKey = table[k] ?? k;
+        return [mappedKey, walk(v)];
+      })
+    );
+  };
+
+  return walk(input);
 }
 
 /** ---------- 工具函式 ---------- */
-function resetAuth(reason, error = null) {
-  Cookies.remove(magicWord.ACCESS_TOKEN);
-  Cookies.remove(magicWord.REFRESH_TOKEN);
-  Cookies.remove(TOKEN);
+function resetAuth(error: AxiosError): void {
+  removeCookie(magicWord.ACCESS_TOKEN);
+  removeCookie(magicWord.REFRESH_TOKEN);
+  removeCookie(magicWord.TOKEN);
   isLogout = true;
-  errorHandler(error || new UnauthorizedError("登入已失效，請重新登入"));
-  if (router.currentRoute.value.path !== "/login") {
-    router.push("/login");
+  error.isHandled = true;
+  alert(error.message || "認證失效，請重新登入");
+  // 如果不是login頁面，導向至login頁面
+  if (!window.location.pathname.includes("/login")) {
+    window.location.href = "/login";
+  }
+}
+
+// 刷新 token
+function refreshToken() {
+  const access = getCookie(magicWord.ACCESS_TOKEN) || "noAccess";
+  const refresh = getCookie(magicWord.REFRESH_TOKEN) || "noRefresh";
+  const isLogin = getCookie(magicWord.TOKEN) === "token";
+  const url = isLogin
+    ? "/authorization/refreshToken"
+    : "/authorization/initializeToken";
+  const headers = {
+    "Content-Type": "application/json;charset=UTF-8",
+    [magicWord.AUTHORIZATION]: `Bearer ${access}`,
+    [magicWord.X_REFRESH_TOKEN]: `Bearer ${refresh}`,
+  };
+  return axios.request({
+    baseURL,
+    url,
+    method: "get",
+    headers,
+  });
+}
+
+// 處理刷新 token 流程
+async function refreshTokenHandler() {
+  try {
+    const res = await refreshToken();
+    const newAccessToken = res.data.access_token;
+    const newRefreshToken = res.data.refresh_token;
+    const expiredTime = getExpiredTime(newRefreshToken);
+    const expiredDate = new Date(expiredTime * 1000);
+
+    setCookie(magicWord.ACCESS_TOKEN, newAccessToken);
+    setCookie(magicWord.REFRESH_TOKEN, newRefreshToken, {
+      expires: expiredDate,
+    });
+    failedQueue.resolveAll(axiosInstance);
+  } catch (err: unknown) {
+    if (err instanceof AxiosError) {
+      resetAuth(err);
+      failedQueue.rejectAll(err);
+    }
+  } finally {
+    isRefreshing = false;
+  }
+}
+
+// 檢查並重置 refresh token 計數器
+function checkAndResetCounter() {
+  const now = Date.now();
+  if (now - lastResetTime >= RESET_INTERVAL) {
+    if (refreshAttempts > 0) {
+      // console.log( '重置 refresh token 計數器' )
+    }
+    refreshAttempts = 0;
+    lastResetTime = now;
   }
 }
