@@ -9,7 +9,7 @@ const queryClient = new QueryClient();
 
 async function fetchPosts() {
   const response = await getPosts();
-  console.log("res", response.userId);
+  console.log("res1", response.userId);
 }
 
 fetchPosts();

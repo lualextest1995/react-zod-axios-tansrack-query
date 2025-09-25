@@ -1,4 +1,4 @@
-import axiosInstance from "@/utils/request1";
+import request from "@/utils/request1";
 
 export type Post = {
   userId: number;
@@ -8,12 +8,15 @@ export type Post = {
 };
 
 export function getPosts() {
-  return axiosInstance.request<Post>({
+  return request<Post>({
     url: "/posts/1",
     method: "GET",
   });
 }
 
 export function getPost() {
-  return axiosInstance.get<Post>("/posts/1");
+  return request<Post>({
+    url: "/posts/1",
+    method: "GET",
+  });
 }

@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios, { type AxiosRequestConfig } from "axios";
 
 const baseURL = "https://jsonplaceholder.typicode.com";
 
@@ -24,4 +24,8 @@ axiosInstance.interceptors.response.use(
   }
 );
 
-export default axiosInstance;
+function request<T>(config: AxiosRequestConfig): Promise<T> {
+  return axiosInstance.request(config);
+}
+
+export default request;
