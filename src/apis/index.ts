@@ -14,9 +14,27 @@ export function getPosts() {
   });
 }
 
-export function getPost() {
+export function getPost({
+  id,
+  ...others
+}: {
+  id: number;
+  page: number;
+  page_size: number;
+}) {
+  console.log(
+    `當前查詢 id: ${id}, page: ${others.page}, page_size: ${others.page_size}`
+  );
   return request<Post>({
-    url: "/posts/1",
+    url: `/posts/${id}`,
     method: "GET",
+  });
+}
+
+export function updatePost(data: Post) {
+  return request<Post>({
+    url: `/posts/1`,
+    method: "POST",
+    data,
   });
 }
