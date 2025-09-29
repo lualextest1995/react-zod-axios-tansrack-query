@@ -9,7 +9,7 @@ export type Post = {
 
 export function getPosts() {
   return request<Post>({
-    url: "/posts/1",
+    url: "/posts",
     method: "GET",
   });
 }
