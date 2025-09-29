@@ -1,6 +1,6 @@
 import { getPost } from "@/apis";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type FormCondition = {
   dataId: string;
@@ -25,34 +25,35 @@ export default function Test1() {
     pageSize: 10,
   });
 
-  // ✅ queryKey 使用完整的 queryCondition
+  // ✅ 固定 queryKey，只靠手動 refetch
   const { data, isFetching, refetch } = useQuery({
-    queryKey: ["posts", queryCondition],
+    queryKey: ["posts"],
     queryFn: () =>
       getPost({
         id: queryCondition.dataId,
         page: queryCondition.page,
         page_size: queryCondition.pageSize,
       }),
+    enabled: false, // ❌ 初始不打
   });
 
-  const handleSearch = () => {
+  // ✅ page / pageSize 改變時，自動 refetch
+  useEffect(() => {
+    refetch();
+  }, [queryCondition.page, queryCondition.pageSize, refetch]);
+
+  const handleSearch = async () => {
     const dataId =
       formCondition.dataId === "" ? 1 : Number(formCondition.dataId);
 
-    // 如果 dataId 跟之前一樣，只需要 refetch
-    if (dataId === queryCondition.dataId) {
-      console.log("dataId 相同，refetch");
-      refetch();
-    } else {
-      console.log("dataId 不同，更新 queryCondition");
-      // 如果 dataId 改變了，更新 queryCondition（會自動觸發）
-      setQueryCondition({
-        dataId,
-        page: 1,
-        pageSize: queryCondition.pageSize,
-      });
-    }
+    setQueryCondition((prev) => ({
+      ...prev,
+      dataId,
+      page: 1, // 搜尋時重置 page
+    }));
+
+    if (queryCondition.page !== 1) return;
+    refetch(); // ✅ 搜尋永遠打
   };
 
   return (
