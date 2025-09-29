@@ -1,7 +1,7 @@
 import { getPosts, type Post } from "@/apis";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { DataTable } from "./DataTable";
+import { Table } from "@/components/tables";
 import { Button } from "./ui/button";
 import { createColumnHelper } from "@tanstack/react-table";
 
@@ -99,12 +99,14 @@ export default function Test2() {
             <div className="text-lg">Loading...</div>
           </div>
         ) : data && Array.isArray(data) && data.length > 0 ? (
-          <DataTable
-            columns={postColumns as any}
-            data={data}
-            initialPageSize={queryCondition.pageSize}
-            className="mb-6"
-          />
+          <div className="mb-6">
+            <Table
+              mode="client"
+              columns={postColumns as any}
+              data={data}
+              initialPageSize={queryCondition.pageSize}
+            />
+          </div>
         ) : (
           <div className="text-center py-8 text-gray-500">
             No data available. Click "search" to load posts.

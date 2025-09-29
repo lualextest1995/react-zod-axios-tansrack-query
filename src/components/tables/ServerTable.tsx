@@ -1,12 +1,20 @@
-import React from "react";
 import {
   useReactTable,
   getCoreRowModel,
   getPaginationRowModel,
   flexRender,
 } from "@tanstack/react-table";
-import { Pagination } from "./Pagination";
 import type { ServerTableProps } from "./types";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { SharedPagination } from "./Pagination";
 
 export function ServerTable<T extends object>({
   columns,
@@ -15,7 +23,7 @@ export function ServerTable<T extends object>({
   pageIndex,
   pageSize,
   onPaginationChange,
-  pageSizeOptions,
+  pageSizeOptions = [5, 10, 20],
   isLoading = false,
 }: ServerTableProps<T>) {
   const table = useReactTable({
@@ -30,42 +38,54 @@ export function ServerTable<T extends object>({
   });
 
   return (
-    <div>
-      <table>
-        <thead>
-          {table.getHeaderGroups().map((headerGroup) => (
-            <tr key={headerGroup.id}>
-              {headerGroup.headers.map((header) => (
-                <th key={header.id}>
-                  {flexRender(
-                    header.column.columnDef.header,
-                    header.getContext()
-                  )}
-                </th>
-              ))}
-            </tr>
-          ))}
-        </thead>
-        <tbody>
-          {isLoading ? (
-            <tr>
-              <td colSpan={columns.length}>Loading...</td>
-            </tr>
-          ) : (
-            table.getRowModel().rows.map((row) => (
-              <tr key={row.id}>
-                {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id}>
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </td>
+    <div className="w-full">
+      <div className="overflow-hidden rounded-md border">
+        <Table>
+          <TableHeader>
+            {table.getHeaderGroups().map((headerGroup) => (
+              <TableRow key={headerGroup.id}>
+                {headerGroup.headers.map((header) => (
+                  <TableHead key={header.id} colSpan={header.colSpan}>
+                    {flexRender(
+                      header.column.columnDef.header,
+                      header.getContext()
+                    )}
+                  </TableHead>
                 ))}
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
+              </TableRow>
+            ))}
+          </TableHeader>
+          <TableBody>
+            {isLoading ? (
+              <TableRow>
+                <TableCell colSpan={columns.length} className="text-center">
+                  Loading...
+                </TableCell>
+              </TableRow>
+            ) : (
+              table.getRowModel().rows.map((row) => (
+                <TableRow key={row.id}>
+                  {row.getVisibleCells().map((cell) => (
+                    <TableCell key={cell.id}>
+                      {flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext()
+                      )}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+          <TableFooter>
+            <TableRow>
+              <TableCell colSpan={columns.length}>Table footer</TableCell>
+            </TableRow>
+          </TableFooter>
+        </Table>
+      </div>
 
-      <Pagination table={table} pageSizeOptions={pageSizeOptions} />
+      <SharedPagination table={table} pageSizeOptions={pageSizeOptions} />
     </div>
   );
 }

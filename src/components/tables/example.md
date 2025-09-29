@@ -1,4 +1,4 @@
-import { Table, createColumns } from '@/tables'
+import { Table, createColumns } from "@/tables"
 
 type User = {
 id: number
@@ -7,14 +7,14 @@ age: number
 }
 
 const userColumns = createColumns<User>()([
-{ header: 'ID', accessorKey: 'id' },
-{ header: 'Name', accessorKey: 'name' },
-{ header: 'Age', accessorKey: 'age' },
+{ header: "ID", accessorKey: "id" },
+{ header: "Name", accessorKey: "name" },
+{ header: "Age", accessorKey: "age" },
 ])
 
 const users: User[] = [
-{ id: 1, name: 'Alice', age: 22 },
-{ id: 2, name: 'Bob', age: 28 },
+{ id: 1, name: "Alice", age: 22 },
+{ id: 2, name: "Bob", age: 28 },
 ]
 
 // Basic
@@ -23,7 +23,13 @@ const users: User[] = [
 
 // Client
 
-<Table mode="client" columns={userColumns} data={users} pageSizeOptions={[5, 10, 20]} />
+<Table
+  mode="client"
+  columns={userColumns}
+  data={users}
+  pageSizeOptions={[5, 10, 20, 50]}   // ✅ 現在會出現在下拉選單
+  initialPageSize={10}
+/>
 
 // Server
 
@@ -35,5 +41,6 @@ const users: User[] = [
   pageIndex={pagination.pageIndex}
   pageSize={pagination.pageSize}
   onPaginationChange={setPagination}
+  pageSizeOptions={[10, 20, 50]}      // ✅ 下拉選單可改變每頁筆數
   isLoading={query.isLoading}
 />

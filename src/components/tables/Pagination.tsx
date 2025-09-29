@@ -1,56 +1,86 @@
 import type { Table } from "@tanstack/react-table";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 
-type PaginationProps<T extends object> = {
+type SharedPaginationProps<T extends object> = {
   table: Table<T>;
   pageSizeOptions?: number[];
 };
 
-export function Pagination<T extends object>({
+export function SharedPagination<T extends object>({
   table,
   pageSizeOptions = [5, 10, 20],
-}: PaginationProps<T>) {
+}: SharedPaginationProps<T>) {
+  const pageCount = table.getPageCount();
+  const currentPage = table.getState().pagination.pageIndex;
+  const pageSize = table.getState().pagination.pageSize;
+
   return (
-    <div style={{ marginTop: "1rem" }}>
-      <button
-        onClick={() => table.setPageIndex(0)}
-        disabled={!table.getCanPreviousPage()}
-      >
-        {"<<"}
-      </button>
-      <button
-        onClick={() => table.previousPage()}
-        disabled={!table.getCanPreviousPage()}
-      >
-        {"<"}
-      </button>
-      <button
-        onClick={() => table.nextPage()}
-        disabled={!table.getCanNextPage()}
-      >
-        {">"}
-      </button>
-      <button
-        onClick={() => table.setPageIndex(table.getPageCount() - 1)}
-        disabled={!table.getCanNextPage()}
-      >
-        {">>"}
-      </button>
-      <span>
-        Page{" "}
-        <strong>
-          {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
-        </strong>
-      </span>
-      <select
-        value={table.getState().pagination.pageSize}
-        onChange={(e) => table.setPageSize(Number(e.target.value))}
-      >
-        {pageSizeOptions.map((size) => (
-          <option key={size} value={size}>
-            Show {size}
-          </option>
-        ))}
-      </select>
+    <div className="flex items-center justify-between mt-4">
+      {/* 頁碼 */}
+      <Pagination>
+        <PaginationContent>
+          <PaginationItem>
+            <PaginationPrevious
+              onClick={() => table.previousPage()}
+              className={
+                table.getCanPreviousPage()
+                  ? ""
+                  : "opacity-50 pointer-events-none"
+              }
+            />
+          </PaginationItem>
+
+          {Array.from({ length: pageCount }).map((_, idx) => (
+            <PaginationItem key={idx}>
+              <PaginationLink
+                onClick={() => table.setPageIndex(idx)}
+                isActive={currentPage === idx}
+              >
+                {idx + 1}
+              </PaginationLink>
+            </PaginationItem>
+          ))}
+
+          {pageCount > 5 && (
+            <PaginationItem>
+              <PaginationEllipsis />
+            </PaginationItem>
+          )}
+
+          <PaginationItem>
+            <PaginationNext
+              onClick={() => table.nextPage()}
+              className={
+                table.getCanNextPage() ? "" : "opacity-50 pointer-events-none"
+              }
+            />
+          </PaginationItem>
+        </PaginationContent>
+      </Pagination>
+
+      {/* Page size 選擇器 */}
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-muted-foreground">Rows per page:</span>
+        <select
+          className="border rounded-md p-1 text-sm"
+          value={pageSize}
+          onChange={(e) => table.setPageSize(Number(e.target.value))}
+        >
+          {pageSizeOptions.map((size) => (
+            <option key={size} value={size}>
+              {size}
+            </option>
+          ))}
+        </select>
+      </div>
     </div>
   );
 }

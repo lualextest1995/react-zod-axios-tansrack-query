@@ -1,10 +1,10 @@
 import type { ColumnDef } from "@tanstack/react-table";
 
-// ===== 基本工具型別 =====
+// ===== 工具型別 =====
 export type TableRow<T extends object> = T;
 export type TableColumns<T extends object> = ColumnDef<T, any>[];
 
-// 🔹 建立欄位定義 Helper
+// Helper: 建立型別安全的欄位
 export function createColumns<T extends object>() {
   return <C extends TableColumns<T>>(cols: C) => cols;
 }
