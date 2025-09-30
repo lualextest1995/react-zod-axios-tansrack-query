@@ -134,6 +134,10 @@ export default function Test2() {
               columns={postColumns}
               data={data}
               initialPageSize={queryCondition.pageSize}
+              enableRowSelection
+              onRowSelectionChange={(rows) => {
+                console.log("選中的使用者:", rows);
+              }}
             />
           </div>
         ) : (

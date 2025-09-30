@@ -7,7 +7,14 @@ export function Table<T extends object>(props: TableProps<T>) {
   const { mode, columns } = props;
 
   if (mode === "basic") {
-    return <BasicTable columns={columns} data={props.data} />;
+    return (
+      <BasicTable
+        columns={columns}
+        data={props.data}
+        enableRowSelection={props.enableRowSelection}
+        onRowSelectionChange={props.onRowSelectionChange}
+      />
+    );
   }
 
   if (mode === "client") {
@@ -17,6 +24,8 @@ export function Table<T extends object>(props: TableProps<T>) {
         data={props.data}
         pageSizeOptions={props.pageSizeOptions}
         initialPageSize={props.initialPageSize}
+        enableRowSelection={props.enableRowSelection}
+        onRowSelectionChange={props.onRowSelectionChange}
       />
     );
   }
@@ -32,6 +41,8 @@ export function Table<T extends object>(props: TableProps<T>) {
         onPaginationChange={props.onPaginationChange}
         pageSizeOptions={props.pageSizeOptions}
         isLoading={props.isLoading}
+        enableRowSelection={props.enableRowSelection}
+        onRowSelectionChange={props.onRowSelectionChange}
       />
     );
   }

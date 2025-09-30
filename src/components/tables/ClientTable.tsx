@@ -1,10 +1,14 @@
+import { useEffect, useState } from "react";
 import {
-  flexRender,
+  useReactTable,
   getCoreRowModel,
   getPaginationRowModel,
-  useReactTable,
+  flexRender,
+  type RowSelectionState,
+  type PaginationState,
 } from "@tanstack/react-table";
-import { useState } from "react";
+import { createSelectionColumn } from "./selectionColumn";
+import type { ClientTableProps } from "./types";
 import {
   Table,
   TableBody,
@@ -15,39 +19,55 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { SharedPagination } from "./Pagination";
-import type { ClientTableProps } from "./types";
 
 export function ClientTable<T extends object>({
   columns,
   data,
-  pageSizeOptions = [10, 20, 50, 100],
+  pageSizeOptions = [5, 10, 20],
   initialPageSize = 10,
+  enableRowSelection = false,
+  onRowSelectionChange,
 }: ClientTableProps<T>) {
-  const [pageSize] = useState(initialPageSize);
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [pagination, setPagination] = useState<PaginationState>({
+    pageIndex: 0,
+    pageSize: initialPageSize,
+  });
+
+  const finalColumns = enableRowSelection
+    ? [createSelectionColumn<T>(), ...columns]
+    : columns;
 
   const table = useReactTable({
     data,
-    columns,
+    columns: finalColumns,
+    state: { rowSelection, pagination },
+    onRowSelectionChange: setRowSelection,
+    onPaginationChange: setPagination, // ✅ 修正: 受控 pagination
+    enableRowSelection,
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
-    initialState: {
-      pagination: { pageIndex: 0, pageSize },
-    },
   });
+
+  useEffect(() => {
+    if (onRowSelectionChange) {
+      const selected = table
+        .getSelectedRowModel()
+        .flatRows.map((r) => r.original as T);
+      onRowSelectionChange(selected);
+    }
+  }, [rowSelection, onRowSelectionChange, table]);
 
   return (
     <div className="w-full">
       <div className="overflow-hidden rounded-md border">
         <Table>
           <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id} colSpan={header.colSpan}>
-                    {flexRender(
-                      header.column.columnDef.header,
-                      header.getContext()
-                    )}
+            {table.getHeaderGroups().map((hg) => (
+              <TableRow key={hg.id}>
+                {hg.headers.map((h) => (
+                  <TableHead key={h.id}>
+                    {flexRender(h.column.columnDef.header, h.getContext())}
                   </TableHead>
                 ))}
               </TableRow>
@@ -66,7 +86,7 @@ export function ClientTable<T extends object>({
           </TableBody>
           <TableFooter>
             <TableRow>
-              <TableCell colSpan={columns.length}>Table footer</TableCell>
+              <TableCell colSpan={finalColumns.length}>Table footer</TableCell>
             </TableRow>
           </TableFooter>
         </Table>

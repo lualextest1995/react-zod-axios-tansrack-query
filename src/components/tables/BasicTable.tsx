@@ -1,8 +1,12 @@
+import { useEffect, useState } from "react";
 import {
-  flexRender,
-  getCoreRowModel,
   useReactTable,
+  getCoreRowModel,
+  flexRender,
+  type RowSelectionState,
 } from "@tanstack/react-table";
+import { createSelectionColumn } from "./selectionColumn";
+import type { BasicTableProps } from "./types";
 import {
   Table,
   TableBody,
@@ -12,31 +16,46 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { BasicTableProps } from "./types";
 
 export function BasicTable<T extends object>({
   columns,
   data,
+  enableRowSelection = false,
+  onRowSelectionChange,
 }: BasicTableProps<T>) {
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const finalColumns = enableRowSelection
+    ? [createSelectionColumn<T>(), ...columns]
+    : columns;
+
   const table = useReactTable({
     data,
-    columns,
+    columns: finalColumns,
+    state: { rowSelection },
+    onRowSelectionChange: setRowSelection,
+    enableRowSelection,
     getCoreRowModel: getCoreRowModel(),
   });
+
+  useEffect(() => {
+    if (onRowSelectionChange) {
+      const selected = table
+        .getSelectedRowModel()
+        .flatRows.map((r) => r.original as T);
+      onRowSelectionChange(selected);
+    }
+  }, [rowSelection, onRowSelectionChange, table]);
 
   return (
     <div className="w-full">
       <div className="overflow-hidden rounded-md border">
         <Table>
           <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id} colSpan={header.colSpan}>
-                    {flexRender(
-                      header.column.columnDef.header,
-                      header.getContext()
-                    )}
+            {table.getHeaderGroups().map((hg) => (
+              <TableRow key={hg.id}>
+                {hg.headers.map((h) => (
+                  <TableHead key={h.id}>
+                    {flexRender(h.column.columnDef.header, h.getContext())}
                   </TableHead>
                 ))}
               </TableRow>
@@ -55,7 +74,7 @@ export function BasicTable<T extends object>({
           </TableBody>
           <TableFooter>
             <TableRow>
-              <TableCell colSpan={columns.length}>Table footer</TableCell>
+              <TableCell colSpan={finalColumns.length}>Table footer</TableCell>
             </TableRow>
           </TableFooter>
         </Table>

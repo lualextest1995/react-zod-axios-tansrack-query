@@ -1,10 +1,14 @@
-import type { OnChangeFn, PaginationState } from "@tanstack/react-table";
+import { useEffect, useState } from "react";
 import {
-  flexRender,
+  useReactTable,
   getCoreRowModel,
   getPaginationRowModel,
-  useReactTable,
+  flexRender,
+  type RowSelectionState,
+  type PaginationState,
 } from "@tanstack/react-table";
+import { createSelectionColumn } from "./selectionColumn";
+import type { ServerTableProps } from "./types";
 import {
   Table,
   TableBody,
@@ -15,7 +19,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { SharedPagination } from "./Pagination";
-import type { ServerTableProps } from "./types";
 
 export function ServerTable<T extends object>({
   columns,
@@ -24,48 +27,58 @@ export function ServerTable<T extends object>({
   pageIndex,
   pageSize,
   onPaginationChange,
-  pageSizeOptions = [10, 20, 50, 100],
+  pageSizeOptions = [5, 10, 20],
   isLoading = false,
+  enableRowSelection = false,
+  onRowSelectionChange,
 }: ServerTableProps<T>) {
-  // 攔截 pagination 變更,處理 pageSize 改變時重置 pageIndex
-  const handlePaginationChange: OnChangeFn<PaginationState> = (updater) => {
-    onPaginationChange?.((prev) => {
-      const newPagination =
-        typeof updater === "function" ? updater(prev) : updater;
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [pagination, setPagination] = useState<PaginationState>({
+    pageIndex,
+    pageSize,
+  });
 
-      // 如果 pageSize 改變了,重置 pageIndex 為 0
-      if (newPagination.pageSize !== prev.pageSize) {
-        return { ...newPagination, pageIndex: 0 };
-      }
-
-      return newPagination;
-    });
-  };
+  const finalColumns = enableRowSelection
+    ? [createSelectionColumn<T>(), ...columns]
+    : columns;
 
   const table = useReactTable({
     data,
-    columns,
-    pageCount: Math.ceil(total / pageSize),
-    state: { pagination: { pageIndex, pageSize } },
-    onPaginationChange: handlePaginationChange,
+    columns: finalColumns,
+    state: { rowSelection, pagination },
+    onRowSelectionChange: setRowSelection,
+    onPaginationChange: (updater) => {
+      const next =
+        typeof updater === "function" ? updater(pagination) : updater;
+      setPagination(next);
+      onPaginationChange(next);
+    },
+    enableRowSelection,
+    pageCount: Math.ceil(total / pagination.pageSize),
     manualPagination: true,
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
   });
+
+  useEffect(() => {
+    if (onRowSelectionChange) {
+      const selected = table
+        .getSelectedRowModel()
+        .flatRows.map((r) => r.original as T);
+      onRowSelectionChange(selected);
+    }
+  }, [rowSelection, onRowSelectionChange, table]);
 
   return (
     <div className="w-full">
       <div className="overflow-hidden rounded-md border">
         <Table>
           <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id} colSpan={header.colSpan}>
-                    {flexRender(
-                      header.column.columnDef.header,
-                      header.getContext()
-                    )}
+            {table.getHeaderGroups().map((hg) => (
+              <TableRow key={hg.id}>
+                {hg.headers.map((h) => (
+                  <TableHead key={h.id}>
+                    {flexRender(h.column.columnDef.header, h.getContext())}
                   </TableHead>
                 ))}
               </TableRow>
@@ -74,7 +87,10 @@ export function ServerTable<T extends object>({
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={columns.length} className="text-center">
+                <TableCell
+                  colSpan={finalColumns.length}
+                  className="text-center"
+                >
                   Loading...
                 </TableCell>
               </TableRow>
@@ -95,7 +111,7 @@ export function ServerTable<T extends object>({
           </TableBody>
           <TableFooter>
             <TableRow>
-              <TableCell colSpan={columns.length}>Table footer</TableCell>
+              <TableCell colSpan={finalColumns.length}>Table footer</TableCell>
             </TableRow>
           </TableFooter>
         </Table>
