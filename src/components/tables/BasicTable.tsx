@@ -1,9 +1,8 @@
 import {
-  useReactTable,
-  getCoreRowModel,
   flexRender,
+  getCoreRowModel,
+  useReactTable,
 } from "@tanstack/react-table";
-import type { BasicTableProps } from "./types";
 import {
   Table,
   TableBody,
@@ -13,6 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import type { BasicTableProps } from "./types";
 
 export function BasicTable<T extends object>({
   columns,

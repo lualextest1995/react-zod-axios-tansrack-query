@@ -41,6 +41,6 @@ const users: User[] = [
   pageIndex={pagination.pageIndex}
   pageSize={pagination.pageSize}
   onPaginationChange={setPagination}
-  pageSizeOptions={[10, 20, 50]}      // ✅ 下拉選單可改變每頁筆數
+  pageSizeOptions={[10, 20, 50]}  // ✅ 下拉選單可改變每頁筆數
   isLoading={query.isLoading}
 />

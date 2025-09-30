@@ -1,22 +1,24 @@
-import type { ColumnDef } from "@tanstack/react-table";
+import type {
+  ColumnDef,
+  OnChangeFn,
+  PaginationState,
+  RowData,
+} from "@tanstack/react-table";
 
 // ===== 工具型別 =====
-export type TableRow<T extends object> = T;
-export type TableColumns<T extends object> = ColumnDef<T, any>[];
-
-// Helper: 建立型別安全的欄位
-export function createColumns<T extends object>() {
-  return <C extends TableColumns<T>>(cols: C) => cols;
-}
+export type TableRow<T extends RowData> = T;
+export type TableColumns<T extends RowData> = {
+  [K in keyof T]: ColumnDef<T, T[K]>;
+}[keyof T][];
 
 // ===== Basic Table =====
-export type BasicTableProps<T extends object> = {
+export type BasicTableProps<T extends RowData> = {
   columns: TableColumns<T>;
   data: TableRow<T>[];
 };
 
 // ===== Client Table =====
-export type ClientTableProps<T extends object> = {
+export type ClientTableProps<T extends RowData> = {
   columns: TableColumns<T>;
   data: TableRow<T>[];
   pageSizeOptions?: number[];
@@ -24,13 +26,13 @@ export type ClientTableProps<T extends object> = {
 };
 
 // ===== Server Table =====
-export type ServerTableProps<T extends object> = {
+export type ServerTableProps<T extends RowData> = {
   columns: TableColumns<T>;
   data: TableRow<T>[];
   total: number;
   pageIndex: number;
   pageSize: number;
-  onPaginationChange: (updater: any) => void;
+  onPaginationChange: OnChangeFn<PaginationState>;
   pageSizeOptions?: number[];
   isLoading?: boolean;
 };
@@ -38,7 +40,7 @@ export type ServerTableProps<T extends object> = {
 // ===== Facade =====
 export type TableMode = "basic" | "client" | "server";
 
-export type TableProps<T extends object> =
+export type TableProps<T extends RowData> =
   | ({ mode: "basic" } & BasicTableProps<T>)
   | ({ mode: "client" } & ClientTableProps<T>)
   | ({ mode: "server" } & ServerTableProps<T>);

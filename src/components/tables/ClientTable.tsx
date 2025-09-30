@@ -1,11 +1,10 @@
-import { useState } from "react";
 import {
-  useReactTable,
+  flexRender,
   getCoreRowModel,
   getPaginationRowModel,
-  flexRender,
+  useReactTable,
 } from "@tanstack/react-table";
-import type { ClientTableProps } from "./types";
+import { useState } from "react";
 import {
   Table,
   TableBody,
@@ -16,11 +15,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { SharedPagination } from "./Pagination";
+import type { ClientTableProps } from "./types";
 
 export function ClientTable<T extends object>({
   columns,
   data,
-  pageSizeOptions = [5, 10, 20],
+  pageSizeOptions = [10, 20, 50, 100],
   initialPageSize = 10,
 }: ClientTableProps<T>) {
   const [pageSize] = useState(initialPageSize);

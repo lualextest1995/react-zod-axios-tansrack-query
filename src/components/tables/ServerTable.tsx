@@ -1,10 +1,10 @@
+import type { OnChangeFn, PaginationState } from "@tanstack/react-table";
 import {
-  useReactTable,
+  flexRender,
   getCoreRowModel,
   getPaginationRowModel,
-  flexRender,
+  useReactTable,
 } from "@tanstack/react-table";
-import type { ServerTableProps } from "./types";
 import {
   Table,
   TableBody,
@@ -15,6 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { SharedPagination } from "./Pagination";
+import type { ServerTableProps } from "./types";
 
 export function ServerTable<T extends object>({
   columns,
@@ -23,15 +24,30 @@ export function ServerTable<T extends object>({
   pageIndex,
   pageSize,
   onPaginationChange,
-  pageSizeOptions = [5, 10, 20],
+  pageSizeOptions = [10, 20, 50, 100],
   isLoading = false,
 }: ServerTableProps<T>) {
+  // 攔截 pagination 變更,處理 pageSize 改變時重置 pageIndex
+  const handlePaginationChange: OnChangeFn<PaginationState> = (updater) => {
+    onPaginationChange?.((prev) => {
+      const newPagination =
+        typeof updater === "function" ? updater(prev) : updater;
+
+      // 如果 pageSize 改變了,重置 pageIndex 為 0
+      if (newPagination.pageSize !== prev.pageSize) {
+        return { ...newPagination, pageIndex: 0 };
+      }
+
+      return newPagination;
+    });
+  };
+
   const table = useReactTable({
     data,
     columns,
     pageCount: Math.ceil(total / pageSize),
     state: { pagination: { pageIndex, pageSize } },
-    onPaginationChange,
+    onPaginationChange: handlePaginationChange,
     manualPagination: true,
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),

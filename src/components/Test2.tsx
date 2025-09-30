@@ -37,7 +37,36 @@ const postColumns = [
       </div>
     ),
   }),
+  columnHelper.display({
+    id: "actions",
+    header: "Actions",
+    cell: (info) => {
+      const id = info.row.original.id;
+      return (
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={() => handleEdit(id)}>
+            Edit
+          </Button>
+          <Button
+            size="sm"
+            variant="destructive"
+            onClick={() => handleDelete(id)}
+          >
+            Delete
+          </Button>
+        </div>
+      );
+    },
+  }),
 ];
+
+function handleEdit(id: number) {
+  alert(`Edit post ID: ${id}`);
+}
+
+function handleDelete(id: number) {
+  alert(`Delete post ID: ${id}`);
+}
 
 export default function Test2() {
   console.log("Test2 render");
@@ -102,7 +131,7 @@ export default function Test2() {
           <div className="mb-6">
             <Table
               mode="client"
-              columns={postColumns as any}
+              columns={postColumns}
               data={data}
               initialPageSize={queryCondition.pageSize}
             />
