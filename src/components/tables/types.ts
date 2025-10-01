@@ -19,15 +19,19 @@ export type BasicTableProps<T extends RowData> = {
 };
 
 // ===== Client =====
+type WithId = { id: string | number };
+
 export type ClientTableProps<T extends RowData> = {
   columns: TableColumns<T>;
   data: T[];
   pageSizeOptions?: number[];
   initialPageSize?: number;
   enableRowSelection?: boolean;
-  selectionMode?: "page" | "global";
   onRowSelectionChange?: (rows: T[]) => void;
-};
+} & (
+  | { selectionMode?: "page" }
+  | { selectionMode: "global"; data: (T & WithId)[] }
+);
 
 // ===== Server =====
 export type ServerTableProps<T extends RowData> = {
@@ -40,9 +44,11 @@ export type ServerTableProps<T extends RowData> = {
   pageSizeOptions?: number[];
   isLoading?: boolean;
   enableRowSelection?: boolean;
-  selectionMode?: "page" | "global";
   onRowSelectionChange?: (rows: T[]) => void;
-};
+} & (
+  | { selectionMode?: "page" }
+  | { selectionMode: "global"; data: (T & WithId)[] }
+);
 
 export type TableMode = "basic" | "client" | "server";
 
