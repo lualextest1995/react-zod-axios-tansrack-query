@@ -1,8 +1,8 @@
+// selectionColumn.tsx
 import type { ColumnDef, RowData } from "@tanstack/react-table";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { CheckedState } from "@radix-ui/react-checkbox";
 
-// 泛型安全的 selection column 工廠
 export function createSelectionColumn<T extends RowData>(): ColumnDef<T> {
   return {
     id: "__select",

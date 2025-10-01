@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+// BasicTable.tsx
+import React, { useState } from "react";
 import {
   useReactTable,
   getCoreRowModel,
@@ -6,6 +7,7 @@ import {
   type RowSelectionState,
 } from "@tanstack/react-table";
 import { createSelectionColumn } from "./selectionColumn";
+import { getRowIdSafe } from "./utils";
 import type { BasicTableProps } from "./types";
 import {
   Table,
@@ -24,6 +26,7 @@ export function BasicTable<T extends object>({
   onRowSelectionChange,
 }: BasicTableProps<T>) {
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+
   const finalColumns = enableRowSelection
     ? [createSelectionColumn<T>(), ...columns]
     : columns;
@@ -32,19 +35,23 @@ export function BasicTable<T extends object>({
     data,
     columns: finalColumns,
     state: { rowSelection },
-    onRowSelectionChange: setRowSelection,
+    onRowSelectionChange: (updater) => {
+      const newSelection =
+        typeof updater === "function" ? updater(rowSelection) : updater;
+      setRowSelection(newSelection);
+
+      if (onRowSelectionChange) {
+        const selectedRows = table
+          .getRowModel()
+          .rows.filter((r) => newSelection[r.id])
+          .map((r) => r.original as T);
+        onRowSelectionChange(selectedRows);
+      }
+    },
     enableRowSelection,
     getCoreRowModel: getCoreRowModel(),
+    getRowId: getRowIdSafe,
   });
-
-  useEffect(() => {
-    if (onRowSelectionChange) {
-      const selected = table
-        .getSelectedRowModel()
-        .flatRows.map((r) => r.original as T);
-      onRowSelectionChange(selected);
-    }
-  }, [rowSelection, onRowSelectionChange, table]);
 
   return (
     <div className="w-full">

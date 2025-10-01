@@ -130,10 +130,9 @@ export default function Test2() {
         ) : data && Array.isArray(data) && data.length > 0 ? (
           <div className="mb-6">
             <Table
-              mode="client"
+              mode="basic"
               columns={postColumns}
               data={data}
-              initialPageSize={queryCondition.pageSize}
               enableRowSelection
               onRowSelectionChange={(rows) => {
                 console.log("選中的使用者:", rows);

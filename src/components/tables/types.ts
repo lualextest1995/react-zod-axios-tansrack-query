@@ -1,3 +1,4 @@
+// types.ts
 import type {
   ColumnDef,
   OnChangeFn,
@@ -9,23 +10,26 @@ export type TableColumns<T extends RowData> = {
   [K in keyof T]: ColumnDef<T, T[K]>;
 }[keyof T][];
 
-export type TableSelectionProps<T extends RowData> = {
-  enableRowSelection?: boolean;
-  onRowSelectionChange?: (selectedRows: T[]) => void;
-};
-
+// ===== Basic =====
 export type BasicTableProps<T extends RowData> = {
   columns: TableColumns<T>;
   data: T[];
-} & TableSelectionProps<T>;
+  enableRowSelection?: boolean;
+  onRowSelectionChange?: (rows: T[]) => void;
+};
 
+// ===== Client =====
 export type ClientTableProps<T extends RowData> = {
   columns: TableColumns<T>;
   data: T[];
   pageSizeOptions?: number[];
   initialPageSize?: number;
-} & TableSelectionProps<T>;
+  enableRowSelection?: boolean;
+  selectionMode?: "page" | "global";
+  onRowSelectionChange?: (rows: T[]) => void;
+};
 
+// ===== Server =====
 export type ServerTableProps<T extends RowData> = {
   columns: TableColumns<T>;
   data: T[];
@@ -35,7 +39,10 @@ export type ServerTableProps<T extends RowData> = {
   onPaginationChange: OnChangeFn<PaginationState>;
   pageSizeOptions?: number[];
   isLoading?: boolean;
-} & TableSelectionProps<T>;
+  enableRowSelection?: boolean;
+  selectionMode?: "page" | "global";
+  onRowSelectionChange?: (rows: T[]) => void;
+};
 
 export type TableMode = "basic" | "client" | "server";
 

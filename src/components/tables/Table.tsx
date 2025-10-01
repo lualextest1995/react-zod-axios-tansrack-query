@@ -1,3 +1,5 @@
+// Table.tsx
+import React from "react";
 import { BasicTable } from "./BasicTable";
 import { ClientTable } from "./ClientTable";
 import { ServerTable } from "./ServerTable";
@@ -25,6 +27,7 @@ export function Table<T extends object>(props: TableProps<T>) {
         pageSizeOptions={props.pageSizeOptions}
         initialPageSize={props.initialPageSize}
         enableRowSelection={props.enableRowSelection}
+        selectionMode={props.selectionMode}
         onRowSelectionChange={props.onRowSelectionChange}
       />
     );
@@ -42,6 +45,7 @@ export function Table<T extends object>(props: TableProps<T>) {
         pageSizeOptions={props.pageSizeOptions}
         isLoading={props.isLoading}
         enableRowSelection={props.enableRowSelection}
+        selectionMode={props.selectionMode}
         onRowSelectionChange={props.onRowSelectionChange}
       />
     );

@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+// ClientTable.tsx
+import { useState } from "react";
 import {
   useReactTable,
   getCoreRowModel,
@@ -8,6 +9,7 @@ import {
   type PaginationState,
 } from "@tanstack/react-table";
 import { createSelectionColumn } from "./selectionColumn";
+import { getRowIdSafe } from "./utils";
 import type { ClientTableProps } from "./types";
 import {
   Table,
@@ -27,12 +29,14 @@ export function ClientTable<T extends object>({
   initialPageSize = 10,
   enableRowSelection = false,
   onRowSelectionChange,
+  selectionMode = "page",
 }: ClientTableProps<T>) {
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [pagination, setPagination] = useState<PaginationState>({
     pageIndex: 0,
     pageSize: initialPageSize,
   });
+  const [selectedMap, setSelectedMap] = useState<Map<string, T>>(new Map());
 
   const finalColumns = enableRowSelection
     ? [createSelectionColumn<T>(), ...columns]
@@ -42,21 +46,45 @@ export function ClientTable<T extends object>({
     data,
     columns: finalColumns,
     state: { rowSelection, pagination },
-    onRowSelectionChange: setRowSelection,
-    onPaginationChange: setPagination, // ✅ 修正: 受控 pagination
+    onRowSelectionChange: (updater) => {
+      const newSelection =
+        typeof updater === "function" ? updater(rowSelection) : updater;
+      setRowSelection(newSelection);
+
+      if (!enableRowSelection || !onRowSelectionChange) return;
+
+      if (selectionMode === "global") {
+        const nextMap = new Map(selectedMap);
+        table.getRowModel().rows.forEach((r, idx) => {
+          const id = getRowIdSafe(r.original as T, idx);
+          if (newSelection[id]) nextMap.set(id, r.original as T);
+          else nextMap.delete(id);
+        });
+        setSelectedMap(nextMap);
+        onRowSelectionChange(Array.from(nextMap.values()));
+      } else {
+        // page 模式
+        const selectedRows = table
+          .getRowModel()
+          .rows.filter((r) => newSelection[r.id])
+          .map((r) => r.original as T);
+        onRowSelectionChange(selectedRows);
+      }
+    },
+    onPaginationChange: (updater) => {
+      const next =
+        typeof updater === "function" ? updater(pagination) : updater;
+      setPagination(next);
+      if (selectionMode === "page") {
+        setRowSelection({});
+        setSelectedMap(new Map());
+      }
+    },
     enableRowSelection,
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
+    getRowId: getRowIdSafe,
   });
-
-  useEffect(() => {
-    if (onRowSelectionChange) {
-      const selected = table
-        .getSelectedRowModel()
-        .flatRows.map((r) => r.original as T);
-      onRowSelectionChange(selected);
-    }
-  }, [rowSelection, onRowSelectionChange, table]);
 
   return (
     <div className="w-full">
@@ -91,7 +119,6 @@ export function ClientTable<T extends object>({
           </TableFooter>
         </Table>
       </div>
-
       <SharedPagination table={table} pageSizeOptions={pageSizeOptions} />
     </div>
   );
